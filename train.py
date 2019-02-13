@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 
 from dataset import Dataset
-from model import MLP
+from model import MLP, Flatten
 from data_utils import *
 
 
@@ -48,20 +48,34 @@ data_params = {
     'device': device}
 
 print('Loading data...')
-# train_generator, val_generator, test_generator = load_data('data/train_tasks.csv', **data_params)
-train_generator, val_generator, test_generator = get_task('data/train_tasks.csv', **data_params)
+train_generator, val_generator, test_generator = load_data('data/mnist_full_set.csv', **data_params)
+# train_generator, val_generator, test_generator = get_task('data/train_tasks.csv', **data_params)
 print(f"Train: {len(train_generator.dataset)} Validation: {len(val_generator.dataset)} Test: {len(test_generator.dataset)}")
 
 num_epochs = 60
 train_epoch_size = len(train_generator.dataset)
 validate_epoch_size = len(val_generator.dataset)
-learning_rate = .0001
+learning_rate = .1
+
+basic_layers = nn.ModuleList([
+        nn.Conv2d(1, 32, 5),
+        nn.BatchNorm2d(32),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        nn.Conv2d(32, 32, 5),
+        nn.BatchNorm2d(32),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        nn.Conv2d(32, 32, 3),
+        nn.BatchNorm2d(32),
+        nn.ReLU(),
+        nn.MaxPool2d(2),
+        Flatten(),
+        nn.Linear(32, 10)
+    ])
 
 mlp = MLP(
-    input_dimension=train_generator.dataset.instances.shape[1],
-    output_dimension=train_generator.dataset.labels.unique().shape[0],
-    hidden_dimension=512,
-    num_layers=2,
+    basic_layers,
     device=device)
 
 loss_function = nn.modules.loss.CrossEntropyLoss()
@@ -87,7 +101,6 @@ plt.title('Losses')
 plt.plot(train_accuracies, '-r', label='train')
 plt.plot(val_accuracies, '-b', label='validation')
 plt.legend(loc='lower right')
-plt.savefig('accuracies.png')
 plt.show()
 
 print("Testing model...")
