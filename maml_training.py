@@ -49,7 +49,7 @@ def run_meta_epoch(tasks, model, base_lr, meta_opt, loss_function):
     meta_loss = 0
 
     for train, test in tasks:
-        updated_layers = deepcopy(model.layers)
+        updated_layers = deepcopy(model.hidden_layers)
         opt = torch.optim.SGD(updated_layers.parameters(), base_lr)
         run_base_epoch(train, model, loss_function, opt, updated_layers)
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--task', type=str, default='mnist')
     parser.add_argument('--base_lr', type=int, default=1e-4)
-    parser.add_argument('--meta_lr', type=int, default=1e-3)
+    parser.add_argument('--meta_lr', type=int, default=1e-2)
     parser.add_argument('--n_way', type=int, default=2)
     parser.add_argument('--k_shot', type=int, default=5)
     parser.add_argument('--batch_size', type=int, default=5)
@@ -105,21 +105,22 @@ if __name__ == "__main__":
     print(f"Test Classes: {test_classes}")
     print()
 
+    hidden_channels = 32
     basic_layers = nn.ModuleList([
-        nn.Conv2d(1, 32, 5),
-        nn.BatchNorm2d(32),
+        nn.Conv2d(1, hidden_channels, 5),
+        nn.BatchNorm2d(hidden_channels),
         nn.ReLU(),
         nn.MaxPool2d(2),
-        nn.Conv2d(32, 32, 5),
-        nn.BatchNorm2d(32),
+        nn.Conv2d(hidden_channels, hidden_channels, 5),
+        nn.BatchNorm2d(hidden_channels),
         nn.ReLU(),
         nn.MaxPool2d(2),
-        nn.Conv2d(32, 32, 3),
-        nn.BatchNorm2d(32),
+        nn.Conv2d(hidden_channels, hidden_channels, 3),
+        nn.BatchNorm2d(hidden_channels),
         nn.ReLU(),
         nn.MaxPool2d(2),
         Flatten(),
-        nn.Linear(32, 10)
+        nn.Linear(hidden_channels, 2)
     ])
 
     hyperparams = dict(output_activation=nn.Softmax, device=device)
@@ -127,7 +128,7 @@ if __name__ == "__main__":
     loss_function = nn.modules.loss.CrossEntropyLoss()
 
     print("Training MAML Model")
-    maml_model = MLP(layers=basic_layers, **hyperparams)
+    maml_model = MLP(hidden_layers=basic_layers, **hyperparams)
     meta_opt = torch.optim.Adam(maml_model.parameters(), lr=args.meta_lr)
     losses = []
     for epoch in range(args.num_epochs):
@@ -143,8 +144,8 @@ if __name__ == "__main__":
     print("Training Pretrain Model")
     pretrain_layers = basic_layers[:-1]
     pretrain_layers.append(nn.Linear(32, len(train_classes)))
-    pretrain_model = MLP(layers=pretrain_layers, **hyperparams)
-    pretrain_opt = torch.optim.Adam(pretrain_model.parameters(), lr=.0001)
+    pretrain_model = MLP(hidden_layers=pretrain_layers, **hyperparams)
+    pretrain_opt = torch.optim.Adam(pretrain_model.parameters(), lr=.001)
     pretrain_losses = []
     for epoch in range(10):
         data = DataLoader(Dataset(train_df, device), batch_size=16, shuffle=True)
@@ -157,7 +158,7 @@ if __name__ == "__main__":
             pretrain_opt.step()
         pretrain_losses.append(np.mean(losses))
         print(f"Epoch {epoch} Loss: {pretrain_losses[-1]}")
-    pretrain_model.layers[-1] = nn.Linear(32, args.n_way, bias=True)
+    pretrain_model.hidden_layers[-1] = nn.Linear(32, args.n_way, bias=True)
     if use_cuda:
         pretrain_model.cuda(device)
     plt.plot(pretrain_losses)
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     print(f"Testing Final Models")
 
     models = {
-        'baseline': MLP(layers=basic_layers, **hyperparams),
+        'baseline': MLP(hidden_layers=basic_layers, **hyperparams),
         'maml': maml_model,
         'pretrain': pretrain_model
     }
